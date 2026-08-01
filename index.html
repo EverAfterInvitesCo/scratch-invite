@@ -97,7 +97,7 @@
       align-items: center;
       background: 
         radial-gradient(circle at 50% 10%, rgba(255, 253, 249, 0.8) 0%, transparent 60%),
-        var(--bg-ivory); 
+        var(--bg-ivory);
     }
 
     /* TOP HEADER BAR */
@@ -547,9 +547,6 @@
 </head>
 <body>
 
-  <!-- BACKGROUND AUDIO ELEMENT -->
-  <audio id="bg-audio" src="/elleila.mp3" loop preload="auto"></audio>
-
   <div class="app-viewport">
     <div class="main-wrapper">
       
@@ -567,7 +564,7 @@
       <!-- LACE FRAME & INTERACTIVE SCRATCH EXPERIENCE STAGE -->
       <main class="lace-experience-stage" id="stage-container">
         
-        <!-- BASE IMAGE: USER'S ORIGINAL LACE.PNG FRAME & HANDS PHOTO -->
+        <!-- BASE IMAGE: USER'S ORIGINAL LACE FRAME & HANDS PHOTO -->
         <img class="lace-frame-img" id="lace-frame-img" src="/lace.png" alt="Lace Frame & Couple Photo" />
 
         <!-- LAYER 2: PEARL PAPER SCRATCH CANVAS LAYER (CLIPPED STRICTLY TO INNER OVAL) -->
@@ -712,16 +709,16 @@
 
       <div class="gallery-masonry">
         <div class="gallery-card">
-          <img src="/img1.jpg" alt="Engagement portrait 1" />
+          <img src="img1.jpg" alt="Engagement portrait" />
         </div>
         <div class="gallery-card">
-          <img src="/img2.jpg" alt="Engagement portrait 2" />
+          <img src="img2.jpg" alt="Couple laughing" />
         </div>
         <div class="gallery-card">
-          <img src="/img3.jpg" alt="Engagement portrait 3" />
+          <img src="img3.jpg" alt="Lake Como" />
         </div>
         <div class="gallery-card">
-          <img src="/img4.jpg" alt="Engagement portrait 4" />
+          <img src="img4.jpg" alt="Rings detail" />
         </div>
       </div>
     </div>
@@ -735,7 +732,7 @@
       <p class="modal-subtitle-text">Lenno, Lake Como • Italy</p>
 
       <div style="width:100%; height:160px; border-radius:14px; overflow:hidden; margin-bottom:16px; border:1px solid var(--border-delicate);">
-        <img src="/weddingvenue.jpg" style="width:100%; height:100%; object-fit:cover;" alt="Villa del Balbianello" />
+        <img src="weddingvenue.jpg" style="width:100%; height:100%; object-fit:cover;" alt="Villa del Balbianello" />
       </div>
 
       <div style="font-size:13px; color:var(--text-muted); text-align:left; line-height:1.6; margin-bottom:20px;">
@@ -771,32 +768,70 @@
       const soundBtn = document.getElementById('sound-btn');
       const soundOnIcon = document.getElementById('sound-on');
       const soundOffIcon = document.getElementById('sound-off');
-      const bgAudio = document.getElementById('bg-audio');
 
       // DUST PARTICLES ARRAY
       let dustParticles = [];
 
-      function playScratchAudio() {
-        if (!soundActive || !bgAudio) return;
-        if (bgAudio.paused) {
-          bgAudio.play().catch(() => {});
+      // AUDIO SYNTHESIZER (WEB AUDIO API)
+      let audioCtx = null;
+      function getAudioContext() {
+        if (!audioCtx) {
+          audioCtx = new (window.AudioContext || window.webkitAudioContext)();
         }
+        if (audioCtx.state === 'suspended') {
+          audioCtx.resume();
+        }
+        return audioCtx;
+      }
+
+      function playScratchAudio() {
+        if (!soundActive) return;
+        try {
+          const ac = getAudioContext();
+          const bufferSize = ac.sampleRate * 0.03;
+          const buffer = ac.createBuffer(1, bufferSize, ac.sampleRate);
+          const data = buffer.getChannelData(0);
+          for (let i = 0; i < bufferSize; i++) {
+            data[i] = Math.random() * 2 - 1;
+          }
+          const source = ac.createBufferSource();
+          source.buffer = buffer;
+          const filter = ac.createBiquadFilter();
+          filter.type = 'highpass';
+          filter.frequency.value = 1800;
+          const gain = ac.createGain();
+          gain.gain.value = 0.03;
+          source.connect(filter);
+          filter.connect(gain);
+          gain.connect(ac.destination);
+          source.start();
+        } catch(e){}
       }
 
       function playRevealChime() {
-        if (!soundActive || !bgAudio) return;
-        if (bgAudio.paused) {
-          bgAudio.play().catch(() => {});
-        }
+        if (!soundActive) return;
+        try {
+          const ac = getAudioContext();
+          const freqs = [523.25, 659.25, 783.99, 1046.50]; // C5 E5 G5 C6
+          freqs.forEach((f, idx) => {
+            const osc = ac.createOscillator();
+            const g = ac.createGain();
+            osc.type = 'sine';
+            osc.frequency.value = f;
+            g.gain.setValueAtTime(0.06, ac.currentTime + idx * 0.12);
+            g.gain.exponentialRampToValueAtTime(0.001, ac.currentTime + idx * 0.12 + 1.4);
+            osc.connect(g);
+            g.connect(ac.destination);
+            osc.start(ac.currentTime + idx * 0.12);
+            osc.stop(ac.currentTime + idx * 0.12 + 1.5);
+          });
+        } catch(e){}
       }
 
       soundBtn.addEventListener('click', () => {
         soundActive = !soundActive;
         soundOnIcon.style.display = soundActive ? 'block' : 'none';
         soundOffIcon.style.display = soundActive ? 'none' : 'block';
-        if (bgAudio) {
-          bgAudio.muted = !soundActive;
-        }
       });
 
       // INITIALIZE SCRATCH CANVAS (PEARL PAPER COATING)
@@ -938,91 +973,280 @@
           dustCtx.save();
           dustCtx.globalAlpha = p.alpha;
           dustCtx.fillStyle = p.color;
-          dustCtx.beginPath();
+
           if (p.sparkle) {
-            dustCtx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+            const s = p.size;
+            dustCtx.beginPath();
+            dustCtx.moveTo(p.x, p.y - s);
+            dustCtx.lineTo(p.x + s * 0.3, p.y - s * 0.3);
+            dustCtx.lineTo(p.x + s, p.y);
+            dustCtx.lineTo(p.x + s * 0.3, p.y + s * 0.3);
+            dustCtx.lineTo(p.x, p.y + s);
+            dustCtx.lineTo(p.x - s * 0.3, p.y + s * 0.3);
+            dustCtx.lineTo(p.x - s, p.y);
+            dustCtx.lineTo(p.x - s * 0.3, p.y - s * 0.3);
+            dustCtx.closePath();
+            dustCtx.fill();
           } else {
-            dustCtx.rect(p.x, p.y, p.size, p.size);
+            dustCtx.beginPath();
+            dustCtx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+            dustCtx.fill();
           }
-          dustCtx.fill();
+
           dustCtx.restore();
         }
+
         requestAnimationFrame(animateDust);
       }
       requestAnimationFrame(animateDust);
 
-      // SCRATCH LOGIC
-      function scratch(x, y) {
+      // ERASE SCRATCH STROKE (DESTINATION-OUT) - LARGER STROKES FOR FAST EFFORTLESS REVEAL
+      function drawScratchStroke(x1, y1, x2, y2) {
         if (isRevealed) return;
+
         ctx.save();
         ctx.globalCompositeOperation = 'destination-out';
+        ctx.lineWidth = 76; // Bigger stroke size so scratch finishes fast
+        ctx.lineCap = 'round';
+        ctx.lineJoin = 'round';
+
         ctx.beginPath();
-        ctx.arc(x, y, 32, 0, Math.PI * 2);
-        ctx.fill();
+        ctx.moveTo(x1, y1);
+        ctx.lineTo(x2, y2);
+        ctx.stroke();
         ctx.restore();
-        checkRevealPercentage();
-        spawnPaperDust(x, y);
+
+        spawnPaperDust(x2, y2);
         playScratchAudio();
       }
 
-      function checkRevealPercentage() {
+      function getCoords(e) {
+        const rect = scratchCanvas.getBoundingClientRect();
+        const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+        const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+        return {
+          x: clientX - rect.left,
+          y: clientY - rect.top
+        };
+      }
+
+      function onScratchStart(e) {
         if (isRevealed) return;
+        isScratching = true;
+        const pos = getCoords(e);
+        lastX = pos.x;
+        lastY = pos.y;
+        drawScratchStroke(lastX, lastY, lastX, lastY);
+      }
+
+      function onScratchMove(e) {
+        if (!isScratching || isRevealed) return;
+        e.preventDefault();
+
+        if (e.touches && e.touches.length > 0) {
+          const rect = scratchCanvas.getBoundingClientRect();
+          for (let i = 0; i < e.touches.length; i++) {
+            const touch = e.touches[i];
+            const tx = touch.clientX - rect.left;
+            const ty = touch.clientY - rect.top;
+            drawScratchStroke(tx, ty, tx, ty);
+          }
+        } else {
+          const pos = getCoords(e);
+          drawScratchStroke(lastX, lastY, pos.x, pos.y);
+          lastX = pos.x;
+          lastY = pos.y;
+        }
+
+        checkPercentageThrottled();
+      }
+
+      function onScratchEnd() {
+        if (!isScratching) return;
+        isScratching = false;
+        calculateScratchedPercentage();
+      }
+
+      scratchCanvas.addEventListener('mousedown', onScratchStart);
+      scratchCanvas.addEventListener('mousemove', onScratchMove);
+      window.addEventListener('mouseup', onScratchEnd);
+
+      scratchCanvas.addEventListener('touchstart', onScratchStart, { passive: false });
+      scratchCanvas.addEventListener('touchmove', onScratchMove, { passive: false });
+      window.addEventListener('touchend', onScratchEnd);
+
+      // SCRATCH PERCENTAGE CALCULATION
+      let checkTimer = null;
+      function checkPercentageThrottled() {
+        if (checkTimer) return;
+        checkTimer = setTimeout(() => {
+          calculateScratchedPercentage();
+          checkTimer = null;
+        }, 120);
+      }
+
+      function calculateScratchedPercentage() {
+        if (isRevealed) return;
+
         const w = scratchCanvas.width;
         const h = scratchCanvas.height;
-        const imageData = ctx.getImageData(0, 0, w, h);
-        const pixels = imageData.data;
-        let transparentPixels = 0;
-        const totalPixels = pixels.length / 4;
+        if (!w || !h || w <= 0 || h <= 0) return;
 
-        // Sample every 16th pixel for high performance
-        for (let i = 3; i < pixels.length; i += 64) {
-          if (pixels[i] < 128) {
-            transparentPixels++;
+        const imgData = ctx.getImageData(0, 0, w, h);
+        const data = imgData.data;
+
+        let cleared = 0;
+        const step = 28;
+        let totalChecked = 0;
+
+        for (let i = 3; i < data.length; i += 4 * step) {
+          totalChecked++;
+          if (data[i] === 0) {
+            cleared++;
           }
         }
 
-        const scratchedRatio = transparentPixels / (totalPixels / 16);
-        if (scratchedRatio >= revealThreshold) {
-          triggerFullReveal();
+        const ratio = cleared / totalChecked;
+
+        // TRIGGER AUTOMATIC COMPLETE REVEAL AT ~45% FOR SWIFT LUXURY UNLOCK
+        if (ratio >= revealThreshold) {
+          completeReveal();
         }
       }
 
-      function triggerFullReveal() {
+      function completeReveal() {
         if (isRevealed) return;
         isRevealed = true;
+
+        statusText.textContent = 'Save the Date';
         scratchCanvas.classList.add('canvas-hidden');
-        invitationPage.classList.add('revealed');
-        statusText.textContent = 'Invitation Revealed';
-        burstSparkles();
+        stageContainer.classList.add('revealed');
+
         playRevealChime();
+        burstSparkles();
+
+        // Smoothly fade in and reveal invitation details below on the same page
+        setTimeout(() => {
+          invitationPage.classList.add('revealed');
+        }, 300);
       }
 
-      // Event listeners for scratching
-      scratchCanvas.addEventListener('pointerdown', (e) => {
-        isScratching = true;
+      // RESET SCRATCH BUTTON
+      document.getElementById('btn-reset').addEventListener('click', () => {
+        isRevealed = false;
+        scratchCanvas.classList.remove('canvas-hidden');
+        stageContainer.classList.remove('revealed');
+        invitationPage.classList.remove('revealed');
+        statusText.textContent = 'Scratch to Reveal';
+
         const rect = scratchCanvas.getBoundingClientRect();
-        lastX = e.clientX - rect.left;
-        lastY = e.clientY - rect.top;
-        scratch(lastX, lastY);
+        drawPearlPaperCoating(rect.width, rect.height);
+
+        window.scrollTo({ top: 0, behavior: 'smooth' });
       });
 
-      scratchCanvas.addEventListener('pointermove', (e) => {
-        if (!isScratching) return;
-        const rect = scratchCanvas.getBoundingClientRect();
-        const x = e.clientX - rect.left;
-        const y = e.clientY - rect.top;
-        scratch(x, y);
-        lastX = x;
-        lastY = y;
+      // COUNTDOWN TIMER TICKER
+      const weddingDate = new Date('2027-08-15T17:00:00');
+      function tickCountdown() {
+        const now = new Date();
+        const diff = weddingDate - now;
+
+        if (diff <= 0) {
+          document.getElementById('timer-days').textContent = '0';
+          document.getElementById('timer-hours').textContent = '0';
+          document.getElementById('timer-mins').textContent = '0';
+          document.getElementById('timer-secs').textContent = '0';
+          return;
+        }
+
+        const days = Math.floor(diff / (1000 * 60 * 60 * 24));
+        const hours = Math.floor((diff / (1000 * 60 * 60)) % 24);
+        const mins = Math.floor((diff / 1000 / 60) % 60);
+        const secs = Math.floor((diff / 1000) % 60);
+
+        document.getElementById('timer-days').textContent = days;
+        document.getElementById('timer-hours').textContent = hours;
+        document.getElementById('timer-mins').textContent = mins;
+        document.getElementById('timer-secs').textContent = secs;
+      }
+      setInterval(tickCountdown, 1000);
+      tickCountdown();
+
+      // MODAL CONTROLS
+      function bindModal(btnId, modalId) {
+        const btn = document.getElementById(btnId);
+        const modal = document.getElementById(modalId);
+        const closeBtn = modal.querySelector('.modal-close-btn');
+
+        btn.addEventListener('click', () => modal.classList.add('active'));
+        closeBtn.addEventListener('click', () => modal.classList.remove('active'));
+        modal.addEventListener('click', (e) => {
+          if (e.target === modal) modal.classList.remove('active');
+        });
+      }
+
+      bindModal('btn-rsvp', 'modal-rsvp');
+      bindModal('btn-gallery', 'modal-gallery');
+      bindModal('btn-venue', 'modal-venue');
+
+      // RSVP FORM SUBMIT (LOCALSTORAGE)
+      const formRsvp = document.getElementById('form-rsvp');
+      const rsvpConfirmed = document.getElementById('rsvp-confirmed');
+      const editRsvpBtn = document.getElementById('edit-rsvp-btn');
+
+      if (localStorage.getItem('wedding_rsvp_sarah_adam')) {
+        formRsvp.style.display = 'none';
+        rsvpConfirmed.style.display = 'block';
+      }
+
+      formRsvp.addEventListener('submit', (e) => {
+        e.preventDefault();
+        const payload = {
+          name: document.getElementById('input-name').value,
+          status: document.getElementById('input-status').value,
+          guests: document.getElementById('input-guests').value,
+          notes: document.getElementById('input-notes').value,
+          date: new Date().toISOString()
+        };
+        localStorage.setItem('wedding_rsvp_sarah_adam', JSON.stringify(payload));
+        formRsvp.style.display = 'none';
+        rsvpConfirmed.style.display = 'block';
       });
 
-      window.addEventListener('pointerup', () => {
-        isScratching = false;
+      editRsvpBtn.addEventListener('click', () => {
+        formRsvp.style.display = 'block';
+        rsvpConfirmed.style.display = 'none';
       });
 
+      // ADD TO CALENDAR ICS FILE GENERATION
+      document.getElementById('btn-calendar').addEventListener('click', () => {
+        const icsContent = 
+`BEGIN:VCALENDAR
+VERSION:2.0
+PRODID:-//Sarah and Adam//Wedding Save the Date//EN
+BEGIN:VEVENT
+UID:sarah-adam-wedding-2027
+DTSTAMP:20260731T000000Z
+DTSTART:20270815T153000Z
+DTEND:20270815T235900Z
+SUMMARY:Save the Date: Sarah & Adam's Wedding
+DESCRIPTION:Save the date for Sarah & Adam's wedding at Villa del Balbianello, Lake Como, Italy.
+LOCATION:Villa del Balbianello, Lenno, Lake Como, Italy
+END:VEVENT
+END:VCALENDAR`;
+
+        const blob = new Blob([icsContent], { type: 'text/calendar;charset=utf-8' });
+        const link = document.createElement('a');
+        link.href = window.URL.createObjectURL(blob);
+        link.setAttribute('download', 'Save-the-Date-Sarah-and-Adam.ics');
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+      });
+
+      // INIT CANVASES ON DOM LOAD & RESIZE
       window.addEventListener('load', initCanvases);
       window.addEventListener('resize', initCanvases);
-
     })();
   </script>
 </body>
