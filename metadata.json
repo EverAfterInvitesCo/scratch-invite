@@ -1,0 +1,6 @@
+{
+  "name": "Save the Date - Scratch to Reveal",
+  "description": "A luxury mobile-first Save the Date interactive experience featuring metallic gold scratch-to-reveal effect, floral framing, countdown timer, RSVP, gallery, and custom sparkles.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
