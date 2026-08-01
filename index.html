@@ -379,7 +379,7 @@
       border: none;
       cursor: pointer;
       box-shadow: 0 6px 18px rgba(52, 46, 43, 0.15);
-      transition: all 0.25 ease;
+      transition: all 0.25s ease;
       display: flex;
       align-items: center;
       justify-content: center;
@@ -546,6 +546,9 @@
   </style>
 </head>
 <body>
+
+  <!-- BACKGROUND AUDIO ELEMENT -->
+  <audio id="bg-audio" src="elleila.mp3" loop preload="auto"></audio>
 
   <div class="app-viewport">
     <div class="main-wrapper">
@@ -758,6 +761,7 @@
       const revealThreshold = 0.45; // Triggers full smooth reveal at 45% scratch progression for quick completion
 
       // CANVAS & DOM REFERENCES
+      const bgAudio = document.getElementById('bg-audio');
       const scratchCanvas = document.getElementById('scratch-canvas');
       const dustCanvas = document.getElementById('dust-canvas');
       const ctx = scratchCanvas.getContext('2d', { willReadFrequently: true });
@@ -772,66 +776,24 @@
       // DUST PARTICLES ARRAY
       let dustParticles = [];
 
-      // AUDIO SYNTHESIZER (WEB AUDIO API)
-      let audioCtx = null;
-      function getAudioContext() {
-        if (!audioCtx) {
-          audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-        }
-        if (audioCtx.state === 'suspended') {
-          audioCtx.resume();
-        }
-        return audioCtx;
+      function playAudioTrack() {
+        if (!soundActive) return;
+        bgAudio.play().catch(() => {});
       }
 
-      function playScratchAudio() {
-        if (!soundActive) return;
-        try {
-          const ac = getAudioContext();
-          const bufferSize = ac.sampleRate * 0.03;
-          const buffer = ac.createBuffer(1, bufferSize, ac.sampleRate);
-          const data = buffer.getChannelData(0);
-          for (let i = 0; i < bufferSize; i++) {
-            data[i] = Math.random() * 2 - 1;
-          }
-          const source = ac.createBufferSource();
-          source.buffer = buffer;
-          const filter = ac.createBiquadFilter();
-          filter.type = 'highpass';
-          filter.frequency.value = 1800;
-          const gain = ac.createGain();
-          gain.gain.value = 0.03;
-          source.connect(filter);
-          filter.connect(gain);
-          gain.connect(ac.destination);
-          source.start();
-        } catch(e){}
-      }
-
-      function playRevealChime() {
-        if (!soundActive) return;
-        try {
-          const ac = getAudioContext();
-          const freqs = [523.25, 659.25, 783.99, 1046.50]; // C5 E5 G5 C6
-          freqs.forEach((f, idx) => {
-            const osc = ac.createOscillator();
-            const g = ac.createGain();
-            osc.type = 'sine';
-            osc.frequency.value = f;
-            g.gain.setValueAtTime(0.06, ac.currentTime + idx * 0.12);
-            g.gain.exponentialRampToValueAtTime(0.001, ac.currentTime + idx * 0.12 + 1.4);
-            osc.connect(g);
-            g.connect(ac.destination);
-            osc.start(ac.currentTime + idx * 0.12);
-            osc.stop(ac.currentTime + idx * 0.12 + 1.5);
-          });
-        } catch(e){}
+      function pauseAudioTrack() {
+        bgAudio.pause();
       }
 
       soundBtn.addEventListener('click', () => {
         soundActive = !soundActive;
         soundOnIcon.style.display = soundActive ? 'block' : 'none';
         soundOffIcon.style.display = soundActive ? 'none' : 'block';
+        if (soundActive) {
+          playAudioTrack();
+        } else {
+          pauseAudioTrack();
+        }
       });
 
       // INITIALIZE SCRATCH CANVAS (PEARL PAPER COATING)
@@ -992,35 +954,14 @@
             dustCtx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
             dustCtx.fill();
           }
-
           dustCtx.restore();
         }
-
         requestAnimationFrame(animateDust);
       }
       requestAnimationFrame(animateDust);
 
-      // ERASE SCRATCH STROKE (DESTINATION-OUT) - LARGER STROKES FOR FAST EFFORTLESS REVEAL
-      function drawScratchStroke(x1, y1, x2, y2) {
-        if (isRevealed) return;
-
-        ctx.save();
-        ctx.globalCompositeOperation = 'destination-out';
-        ctx.lineWidth = 76; // Bigger stroke size so scratch finishes fast
-        ctx.lineCap = 'round';
-        ctx.lineJoin = 'round';
-
-        ctx.beginPath();
-        ctx.moveTo(x1, y1);
-        ctx.lineTo(x2, y2);
-        ctx.stroke();
-        ctx.restore();
-
-        spawnPaperDust(x2, y2);
-        playScratchAudio();
-      }
-
-      function getCoords(e) {
+      // SCRATCH INTERACTIONS
+      function getEventPos(e) {
         const rect = scratchCanvas.getBoundingClientRect();
         const clientX = e.touches ? e.touches[0].clientX : e.clientX;
         const clientY = e.touches ? e.touches[0].clientY : e.clientY;
@@ -1030,223 +971,192 @@
         };
       }
 
-      function onScratchStart(e) {
+      function scratchAt(x, y) {
         if (isRevealed) return;
-        isScratching = true;
-        const pos = getCoords(e);
-        lastX = pos.x;
-        lastY = pos.y;
-        drawScratchStroke(lastX, lastY, lastX, lastY);
+        ctx.save();
+        ctx.globalCompositeOperation = 'destination-out';
+        ctx.beginPath();
+        ctx.arc(x, y, 38, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+
+        spawnPaperDust(x, y);
+        playAudioTrack();
+
+        // Check scratched percentage periodically
+        checkScratchProgress();
       }
 
-      function onScratchMove(e) {
-        if (!isScratching || isRevealed) return;
-        e.preventDefault();
-
-        if (e.touches && e.touches.length > 0) {
-          const rect = scratchCanvas.getBoundingClientRect();
-          for (let i = 0; i < e.touches.length; i++) {
-            const touch = e.touches[i];
-            const tx = touch.clientX - rect.left;
-            const ty = touch.clientY - rect.top;
-            drawScratchStroke(tx, ty, tx, ty);
-          }
-        } else {
-          const pos = getCoords(e);
-          drawScratchStroke(lastX, lastY, pos.x, pos.y);
-          lastX = pos.x;
-          lastY = pos.y;
-        }
-
-        checkPercentageThrottled();
-      }
-
-      function onScratchEnd() {
-        if (!isScratching) return;
-        isScratching = false;
-        calculateScratchedPercentage();
-      }
-
-      scratchCanvas.addEventListener('mousedown', onScratchStart);
-      scratchCanvas.addEventListener('mousemove', onScratchMove);
-      window.addEventListener('mouseup', onScratchEnd);
-
-      scratchCanvas.addEventListener('touchstart', onScratchStart, { passive: false });
-      scratchCanvas.addEventListener('touchmove', onScratchMove, { passive: false });
-      window.addEventListener('touchend', onScratchEnd);
-
-      // SCRATCH PERCENTAGE CALCULATION
-      let checkTimer = null;
-      function checkPercentageThrottled() {
-        if (checkTimer) return;
-        checkTimer = setTimeout(() => {
-          calculateScratchedPercentage();
-          checkTimer = null;
-        }, 120);
-      }
-
-      function calculateScratchedPercentage() {
+      function checkScratchProgress() {
         if (isRevealed) return;
-
-        const w = scratchCanvas.width;
-        const h = scratchCanvas.height;
-        if (!w || !h || w <= 0 || h <= 0) return;
-
-        const imgData = ctx.getImageData(0, 0, w, h);
-        const data = imgData.data;
-
-        let cleared = 0;
-        const step = 28;
-        let totalChecked = 0;
-
-        for (let i = 3; i < data.length; i += 4 * step) {
-          totalChecked++;
-          if (data[i] === 0) {
-            cleared++;
+        try {
+          const w = scratchCanvas.width;
+          const h = scratchCanvas.height;
+          const imgData = ctx.getImageData(0, 0, w, h);
+          const pixels = imgData.data;
+          let transparentCount = 0;
+          const totalPixels = pixels.length / 4;
+          // Sample every 16th pixel for performance
+          for (let i = 3; i < pixels.length; i += 64) {
+            if (pixels[i] < 30) {
+              transparentCount++;
+            }
           }
-        }
+          const checkedCount = totalPixels / 16;
+          const progress = transparentCount / checkedCount;
 
-        const ratio = cleared / totalChecked;
-
-        // TRIGGER AUTOMATIC COMPLETE REVEAL AT ~45% FOR SWIFT LUXURY UNLOCK
-        if (ratio >= revealThreshold) {
-          completeReveal();
-        }
+          if (progress >= revealThreshold) {
+            triggerFullReveal();
+          }
+        } catch (e) {}
       }
 
-      function completeReveal() {
+      function triggerFullReveal() {
         if (isRevealed) return;
         isRevealed = true;
 
-        statusText.textContent = 'Save the Date';
         scratchCanvas.classList.add('canvas-hidden');
-        stageContainer.classList.add('revealed');
-
-        playRevealChime();
+        statusText.textContent = 'Invitation Revealed';
+        document.getElementById('status-badge').style.borderColor = 'var(--text-accent)';
+        
+        invitationPage.classList.add('revealed');
         burstSparkles();
-
-        // Smoothly fade in and reveal invitation details below on the same page
-        setTimeout(() => {
-          invitationPage.classList.add('revealed');
-        }, 300);
+        playAudioTrack();
       }
 
-      // RESET SCRATCH BUTTON
-      document.getElementById('btn-reset').addEventListener('click', () => {
-        isRevealed = false;
-        scratchCanvas.classList.remove('canvas-hidden');
-        stageContainer.classList.remove('revealed');
-        invitationPage.classList.remove('revealed');
-        statusText.textContent = 'Scratch to Reveal';
-
-        const rect = scratchCanvas.getBoundingClientRect();
-        drawPearlPaperCoating(rect.width, rect.height);
-
-        window.scrollTo({ top: 0, behavior: 'smooth' });
+      // Event Listeners for Scratch
+      scratchCanvas.addEventListener('mousedown', (e) => {
+        if (isRevealed) return;
+        isScratching = true;
+        const pos = getEventPos(e);
+        lastX = pos.x;
+        lastY = pos.y;
+        scratchAt(lastX, lastY);
       });
 
-      // COUNTDOWN TIMER TICKER
-      const weddingDate = new Date('2027-08-15T17:00:00');
-      function tickCountdown() {
-        const now = new Date();
-        const diff = weddingDate - now;
+      window.addEventListener('mousemove', (e) => {
+        if (!isScratching || isRevealed) return;
+        const pos = getEventPos(e);
+        scratchAt(pos.x, pos.y);
+      });
 
-        if (diff <= 0) {
-          document.getElementById('timer-days').textContent = '0';
-          document.getElementById('timer-hours').textContent = '0';
-          document.getElementById('timer-mins').textContent = '0';
-          document.getElementById('timer-secs').textContent = '0';
-          return;
+      window.addEventListener('mouseup', () => {
+        isScratching = false;
+      });
+
+      scratchCanvas.addEventListener('touchstart', (e) => {
+        if (isRevealed) return;
+        isScratching = true;
+        const pos = getEventPos(e);
+        lastX = pos.x;
+        lastY = pos.y;
+        scratchAt(lastX, lastY);
+        e.preventDefault();
+      }, { passive: false });
+
+      window.addEventListener('touchmove', (e) => {
+        if (!isScratching || isRevealed) return;
+        const pos = getEventPos(e);
+        scratchAt(pos.x, pos.y);
+        e.preventDefault();
+      }, { passive: false });
+
+      window.addEventListener('touchend', () => {
+        isScratching = false;
+      });
+
+      // COUNTDOWN TIMER LOGIC
+      function updateCountdown() {
+        const targetDate = new Date('August 15, 2027 16:30:00').getTime();
+        const now = new Date().getTime();
+        const distance = targetDate - now;
+
+        if (distance > 0) {
+          const days = Math.floor(distance / (1000 * 60 * 60 * 24));
+          const hours = Math.floor((distance % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+          const mins = Math.floor((distance % (1000 * 60 * 60)) / (1000 * 60));
+          const secs = Math.floor((distance % (1000 * 60)) / 1000);
+
+          document.getElementById('timer-days').textContent = days;
+          document.getElementById('timer-hours').textContent = String(hours).padStart(2, '0');
+          document.getElementById('timer-mins').textContent = String(mins).padStart(2, '0');
+          document.getElementById('timer-secs').textContent = String(secs).padStart(2, '0');
         }
-
-        const days = Math.floor(diff / (1000 * 60 * 60 * 24));
-        const hours = Math.floor((diff / (1000 * 60 * 60)) % 24);
-        const mins = Math.floor((diff / 1000 / 60) % 60);
-        const secs = Math.floor((diff / 1000) % 60);
-
-        document.getElementById('timer-days').textContent = days;
-        document.getElementById('timer-hours').textContent = hours;
-        document.getElementById('timer-mins').textContent = mins;
-        document.getElementById('timer-secs').textContent = secs;
       }
-      setInterval(tickCountdown, 1000);
-      tickCountdown();
+      setInterval(updateCountdown, 1000);
+      updateCountdown();
 
-      // MODAL CONTROLS
-      function bindModal(btnId, modalId) {
+      // MODALS MANAGEMENT
+      function setupModal(btnId, modalId) {
         const btn = document.getElementById(btnId);
         const modal = document.getElementById(modalId);
-        const closeBtn = modal.querySelector('.modal-close-btn');
+        if (!btn || !modal) return;
 
-        btn.addEventListener('click', () => modal.classList.add('active'));
-        closeBtn.addEventListener('click', () => modal.classList.remove('active'));
+        btn.addEventListener('click', () => {
+          modal.classList.add('active');
+        });
+
+        modal.querySelectorAll('.modal-close-btn, .close-modal').forEach(closeBtn => {
+          closeBtn.addEventListener('click', () => {
+            modal.classList.remove('active');
+          });
+        });
+
         modal.addEventListener('click', (e) => {
-          if (e.target === modal) modal.classList.remove('active');
+          if (e.target === modal) {
+            modal.classList.remove('active');
+          }
         });
       }
 
-      bindModal('btn-rsvp', 'modal-rsvp');
-      bindModal('btn-gallery', 'modal-gallery');
-      bindModal('btn-venue', 'modal-venue');
+      setupModal('btn-rsvp', 'modal-rsvp');
+      setupModal('btn-gallery', 'modal-gallery');
+      setupModal('btn-venue', 'modal-venue');
 
-      // RSVP FORM SUBMIT (LOCALSTORAGE)
-      const formRsvp = document.getElementById('form-rsvp');
-      const rsvpConfirmed = document.getElementById('rsvp-confirmed');
-      const editRsvpBtn = document.getElementById('edit-rsvp-btn');
-
-      if (localStorage.getItem('wedding_rsvp_sarah_adam')) {
-        formRsvp.style.display = 'none';
-        rsvpConfirmed.style.display = 'block';
-      }
-
-      formRsvp.addEventListener('submit', (e) => {
-        e.preventDefault();
-        const payload = {
-          name: document.getElementById('input-name').value,
-          status: document.getElementById('input-status').value,
-          guests: document.getElementById('input-guests').value,
-          notes: document.getElementById('input-notes').value,
-          date: new Date().toISOString()
-        };
-        localStorage.setItem('wedding_rsvp_sarah_adam', JSON.stringify(payload));
-        formRsvp.style.display = 'none';
-        rsvpConfirmed.style.display = 'block';
-      });
-
-      editRsvpBtn.addEventListener('click', () => {
-        formRsvp.style.display = 'block';
-        rsvpConfirmed.style.display = 'none';
-      });
-
-      // ADD TO CALENDAR ICS FILE GENERATION
+      // ADD TO CALENDAR BUTTON
       document.getElementById('btn-calendar').addEventListener('click', () => {
-        const icsContent = 
-`BEGIN:VCALENDAR
-VERSION:2.0
-PRODID:-//Sarah and Adam//Wedding Save the Date//EN
-BEGIN:VEVENT
-UID:sarah-adam-wedding-2027
-DTSTAMP:20260731T000000Z
-DTSTART:20270815T153000Z
-DTEND:20270815T235900Z
-SUMMARY:Save the Date: Sarah & Adam's Wedding
-DESCRIPTION:Save the date for Sarah & Adam's wedding at Villa del Balbianello, Lake Como, Italy.
-LOCATION:Villa del Balbianello, Lenno, Lake Como, Italy
-END:VEVENT
-END:VCALENDAR`;
-
-        const blob = new Blob([icsContent], { type: 'text/calendar;charset=utf-8' });
-        const link = document.createElement('a');
-        link.href = window.URL.createObjectURL(blob);
-        link.setAttribute('download', 'Save-the-Date-Sarah-and-Adam.ics');
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
+        const title = encodeURIComponent("Sarah & Adam's Wedding Celebration");
+        const details = encodeURIComponent("Join us for our wedding celebration at Villa del Balbianello, Lake Como, Italy.");
+        const location = encodeURIComponent("Villa del Balbianello, Lenno, Lake Como, Italy");
+        const dates = "20270815T143000Z/20270816T010000Z";
+        const gcalUrl = `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${title}&details=${details}&location=${location}&dates=${dates}`;
+        window.open(gcalUrl, '_blank');
       });
 
-      // INIT CANVASES ON DOM LOAD & RESIZE
-      window.addEventListener('load', initCanvases);
-      window.addEventListener('resize', initCanvases);
+      // SCRATCH AGAIN RESET BUTTON
+      document.getElementById('btn-reset').addEventListener('click', () => {
+        isRevealed = false;
+        scratchCanvas.classList.remove('canvas-hidden');
+        statusText.textContent = 'Scratch to Reveal';
+        document.getElementById('status-badge').style.borderColor = 'var(--border-delicate)';
+        invitationPage.classList.remove('revealed');
+        const rect = scratchCanvas.getBoundingClientRect();
+        drawPearlPaperCoating(rect.width, rect.height);
+      });
+
+      // RSVP FORM SUBMISSION
+      const rsvpForm = document.getElementById('form-rsvp');
+      const rsvpConfirmed = document.getElementById('rsvp-confirmed');
+      rsvpForm.addEventListener('submit', (e) => {
+        e.preventDefault();
+        rsvpForm.style.display = 'none';
+        rsvpConfirmed.style.display = 'block';
+      });
+
+      document.getElementById('edit-rsvp-btn').addEventListener('click', () => {
+        rsvpConfirmed.style.display = 'none';
+        rsvpForm.style.display = 'block';
+      });
+
+      // Window Resize Initialization
+      window.addEventListener('load', () => {
+        initCanvases();
+      });
+      window.addEventListener('resize', () => {
+        if (!isRevealed) {
+          initCanvases();
+        }
+      });
     })();
   </script>
 </body>
