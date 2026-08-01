@@ -564,7 +564,7 @@
       <!-- LACE FRAME & INTERACTIVE SCRATCH EXPERIENCE STAGE -->
       <main class="lace-experience-stage" id="stage-container">
         
-        <!-- BASE IMAGE: USER'S ORIGINAL LACE FRAME & HANDS PHOTO -->
+        <!-- BASE IMAGE: USER'S ORIGINAL LACE.PNG FRAME & HANDS PHOTO -->
         <img class="lace-frame-img" id="lace-frame-img" src="/lace.png" alt="Lace Frame & Couple Photo" />
 
         <!-- LAYER 2: PEARL PAPER SCRATCH CANVAS LAYER (CLIPPED STRICTLY TO INNER OVAL) -->
@@ -709,16 +709,16 @@
 
       <div class="gallery-masonry">
         <div class="gallery-card">
-          <img src="https://images.unsplash.com/photo-1519741497674-611481863552?auto=format&fit=crop&w=600&q=80" alt="Engagement portrait" />
+          <img src="/img1.jpg" alt="Engagement portrait 1" />
         </div>
         <div class="gallery-card">
-          <img src="https://images.unsplash.com/photo-1511285560929-80b456fea0bc?auto=format&fit=crop&w=600&q=80" alt="Couple laughing" />
+          <img src="/img2.jpg" alt="Engagement portrait 2" />
         </div>
         <div class="gallery-card">
-          <img src="https://images.unsplash.com/photo-1583939003579-730e3918a45a?auto=format&fit=crop&w=600&q=80" alt="Lake Como" />
+          <img src="/img3.jpg" alt="Engagement portrait 3" />
         </div>
         <div class="gallery-card">
-          <img src="https://images.unsplash.com/photo-1522673607200-164d1b6ce486?auto=format&fit=crop&w=600&q=80" alt="Rings detail" />
+          <img src="/img4.jpg" alt="Engagement portrait 4" />
         </div>
       </div>
     </div>
@@ -732,7 +732,7 @@
       <p class="modal-subtitle-text">Lenno, Lake Como • Italy</p>
 
       <div style="width:100%; height:160px; border-radius:14px; overflow:hidden; margin-bottom:16px; border:1px solid var(--border-delicate);">
-        <img src="https://images.unsplash.com/photo-1583939003579-730e3918a45a?auto=format&fit=crop&w=800&q=80" style="width:100%; height:100%; object-fit:cover;" alt="Villa del Balbianello" />
+        <img src="/img3.jpg" style="width:100%; height:100%; object-fit:cover;" alt="Villa del Balbianello" />
       </div>
 
       <div style="font-size:13px; color:var(--text-muted); text-align:left; line-height:1.6; margin-bottom:20px;">
@@ -973,54 +973,75 @@
           dustCtx.save();
           dustCtx.globalAlpha = p.alpha;
           dustCtx.fillStyle = p.color;
-
+          dustCtx.beginPath();
           if (p.sparkle) {
-            const s = p.size;
-            dustCtx.beginPath();
-            dustCtx.moveTo(p.x, p.y - s);
-            dustCtx.lineTo(p.x + s * 0.3, p.y - s * 0.3);
-            dustCtx.lineTo(p.x + s, p.y);
-            dustCtx.lineTo(p.x + s * 0.3, p.y + s * 0.3);
-            dustCtx.lineTo(p.x, p.y + s);
-            dustCtx.lineTo(p.x - s * 0.3, p.y + s * 0.3);
-            dustCtx.lineTo(p.x - s, p.y);
-            dustCtx.lineTo(p.x - s * 0.3, p.y - s * 0.3);
-            dustCtx.closePath();
-            dustCtx.fill();
-          } else {
-            dustCtx.beginPath();
             dustCtx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
-            dustCtx.fill();
+          } else {
+            dustCtx.rect(p.x, p.y, p.size, p.size);
           }
-
+          dustCtx.fill();
           dustCtx.restore();
         }
-
         requestAnimationFrame(animateDust);
       }
       requestAnimationFrame(animateDust);
 
-      // ERASE SCRATCH STROKE (DESTINATION-OUT) - LARGER STROKES FOR FAST EFFORTLESS REVEAL
-      function drawScratchStroke(x1, y1, x2, y2) {
+      // SCRATCH LOGIC
+      function scratch(x, y) {
         if (isRevealed) return;
-
         ctx.save();
         ctx.globalCompositeOperation = 'destination-out';
-        ctx.lineWidth = 76; // Bigger stroke size so scratch finishes fast
-        ctx.lineCap = 'round';
-        ctx.lineJoin = 'round';
-
         ctx.beginPath();
-        ctx.moveTo(x1, y1);
-        ctx.lineTo(x2, y2);
-        ctx.stroke();
+        ctx.arc(x, y, 32, 0, Math.PI * 2);
+        ctx.fill();
         ctx.restore();
 
-        spawnPaperDust(x2, y2);
         playScratchAudio();
+        spawnPaperDust(x, y);
+
+        // Check progress periodically
+        if (Math.random() < 0.15) {
+          checkScratchProgress();
+        }
       }
 
-      function getCoords(e) {
+      function checkScratchProgress() {
+        if (isRevealed) return;
+        const w = scratchCanvas.width;
+        const h = scratchCanvas.height;
+        try {
+          const imgData = ctx.getImageData(0, 0, w, h);
+          const pixels = imgData.data;
+          let transparentPixels = 0;
+          const totalPixels = pixels.length / 4;
+
+          // Sample every 16th pixel for performance
+          for (let i = 3; i < pixels.length; i += 64) {
+            if (pixels[i] === 0) {
+              transparentPixels++;
+            }
+          }
+
+          const progress = transparentPixels / (totalPixels / 16);
+          if (progress >= revealThreshold) {
+            triggerFullReveal();
+          }
+        } catch(e) {}
+      }
+
+      function triggerFullReveal() {
+        if (isRevealed) return;
+        isRevealed = true;
+        scratchCanvas.classList.add('canvas-hidden');
+        statusText.textContent = 'Invitation Revealed';
+        document.getElementById('status-badge').style.borderColor = 'var(--text-accent)';
+        invitationPage.classList.add('revealed');
+        playRevealChime();
+        burstSparkles();
+      }
+
+      // EVENT LISTENERS FOR SCRATCH
+      function getTouchPos(e) {
         const rect = scratchCanvas.getBoundingClientRect();
         const clientX = e.touches ? e.touches[0].clientX : e.clientX;
         const clientY = e.touches ? e.touches[0].clientY : e.clientY;
@@ -1030,223 +1051,116 @@
         };
       }
 
-      function onScratchStart(e) {
-        if (isRevealed) return;
+      scratchCanvas.addEventListener('mousedown', (e) => {
         isScratching = true;
-        const pos = getCoords(e);
+        const pos = getTouchPos(e);
         lastX = pos.x;
         lastY = pos.y;
-        drawScratchStroke(lastX, lastY, lastX, lastY);
-      }
-
-      function onScratchMove(e) {
-        if (!isScratching || isRevealed) return;
-        e.preventDefault();
-
-        if (e.touches && e.touches.length > 0) {
-          const rect = scratchCanvas.getBoundingClientRect();
-          for (let i = 0; i < e.touches.length; i++) {
-            const touch = e.touches[i];
-            const tx = touch.clientX - rect.left;
-            const ty = touch.clientY - rect.top;
-            drawScratchStroke(tx, ty, tx, ty);
-          }
-        } else {
-          const pos = getCoords(e);
-          drawScratchStroke(lastX, lastY, pos.x, pos.y);
-          lastX = pos.x;
-          lastY = pos.y;
-        }
-
-        checkPercentageThrottled();
-      }
-
-      function onScratchEnd() {
-        if (!isScratching) return;
-        isScratching = false;
-        calculateScratchedPercentage();
-      }
-
-      scratchCanvas.addEventListener('mousedown', onScratchStart);
-      scratchCanvas.addEventListener('mousemove', onScratchMove);
-      window.addEventListener('mouseup', onScratchEnd);
-
-      scratchCanvas.addEventListener('touchstart', onScratchStart, { passive: false });
-      scratchCanvas.addEventListener('touchmove', onScratchMove, { passive: false });
-      window.addEventListener('touchend', onScratchEnd);
-
-      // SCRATCH PERCENTAGE CALCULATION
-      let checkTimer = null;
-      function checkPercentageThrottled() {
-        if (checkTimer) return;
-        checkTimer = setTimeout(() => {
-          calculateScratchedPercentage();
-          checkTimer = null;
-        }, 120);
-      }
-
-      function calculateScratchedPercentage() {
-        if (isRevealed) return;
-
-        const w = scratchCanvas.width;
-        const h = scratchCanvas.height;
-        if (!w || !h || w <= 0 || h <= 0) return;
-
-        const imgData = ctx.getImageData(0, 0, w, h);
-        const data = imgData.data;
-
-        let cleared = 0;
-        const step = 28;
-        let totalChecked = 0;
-
-        for (let i = 3; i < data.length; i += 4 * step) {
-          totalChecked++;
-          if (data[i] === 0) {
-            cleared++;
-          }
-        }
-
-        const ratio = cleared / totalChecked;
-
-        // TRIGGER AUTOMATIC COMPLETE REVEAL AT ~45% FOR SWIFT LUXURY UNLOCK
-        if (ratio >= revealThreshold) {
-          completeReveal();
-        }
-      }
-
-      function completeReveal() {
-        if (isRevealed) return;
-        isRevealed = true;
-
-        statusText.textContent = 'Save the Date';
-        scratchCanvas.classList.add('canvas-hidden');
-        stageContainer.classList.add('revealed');
-
-        playRevealChime();
-        burstSparkles();
-
-        // Smoothly fade in and reveal invitation details below on the same page
-        setTimeout(() => {
-          invitationPage.classList.add('revealed');
-        }, 300);
-      }
-
-      // RESET SCRATCH BUTTON
-      document.getElementById('btn-reset').addEventListener('click', () => {
-        isRevealed = false;
-        scratchCanvas.classList.remove('canvas-hidden');
-        stageContainer.classList.remove('revealed');
-        invitationPage.classList.remove('revealed');
-        statusText.textContent = 'Scratch to Reveal';
-
-        const rect = scratchCanvas.getBoundingClientRect();
-        drawPearlPaperCoating(rect.width, rect.height);
-
-        window.scrollTo({ top: 0, behavior: 'smooth' });
+        scratch(lastX, lastY);
       });
 
-      // COUNTDOWN TIMER TICKER
-      const weddingDate = new Date('2027-08-15T17:00:00');
-      function tickCountdown() {
-        const now = new Date();
-        const diff = weddingDate - now;
+      window.addEventListener('mousemove', (e) => {
+        if (!isScratching || isRevealed) return;
+        const pos = getTouchPos(e);
+        scratch(pos.x, pos.y);
+      });
 
-        if (diff <= 0) {
-          document.getElementById('timer-days').textContent = '0';
-          document.getElementById('timer-hours').textContent = '0';
-          document.getElementById('timer-mins').textContent = '0';
-          document.getElementById('timer-secs').textContent = '0';
-          return;
-        }
+      window.addEventListener('mouseup', () => {
+        isScratching = false;
+      });
 
-        const days = Math.floor(diff / (1000 * 60 * 60 * 24));
-        const hours = Math.floor((diff / (1000 * 60 * 60)) % 24);
-        const mins = Math.floor((diff / 1000 / 60) % 60);
-        const secs = Math.floor((diff / 1000) % 60);
+      scratchCanvas.addEventListener('touchstart', (e) => {
+        isScratching = true;
+        const pos = getTouchPos(e);
+        lastX = pos.x;
+        lastY = pos.y;
+        scratch(lastX, lastY);
+        e.preventDefault();
+      }, { passive: false });
 
-        document.getElementById('timer-days').textContent = days;
-        document.getElementById('timer-hours').textContent = hours;
-        document.getElementById('timer-mins').textContent = mins;
-        document.getElementById('timer-secs').textContent = secs;
-      }
-      setInterval(tickCountdown, 1000);
-      tickCountdown();
+      window.addEventListener('touchmove', (e) => {
+        if (!isScratching || isRevealed) return;
+        const pos = getTouchPos(e);
+        scratch(pos.x, pos.y);
+        e.preventDefault();
+      }, { passive: false });
 
-      // MODAL CONTROLS
-      function bindModal(btnId, modalId) {
+      window.addEventListener('touchend', () => {
+        isScratching = false;
+      });
+
+      // MODALS SETUP
+      function setupModal(btnId, modalId) {
         const btn = document.getElementById(btnId);
         const modal = document.getElementById(modalId);
-        const closeBtn = modal.querySelector('.modal-close-btn');
+        if (!btn || !modal) return;
 
-        btn.addEventListener('click', () => modal.classList.add('active'));
-        closeBtn.addEventListener('click', () => modal.classList.remove('active'));
+        btn.addEventListener('click', () => {
+          modal.classList.add('active');
+        });
+
+        const closeBtns = modal.querySelectorAll('.modal-close-btn, [class*="close-modal"]');
+        closeBtns.forEach(cb => {
+          cb.addEventListener('click', () => {
+            modal.classList.remove('active');
+          });
+        });
+
         modal.addEventListener('click', (e) => {
-          if (e.target === modal) modal.classList.remove('active');
+          if (e.target === modal) {
+            modal.classList.remove('active');
+          }
         });
       }
 
-      bindModal('btn-rsvp', 'modal-rsvp');
-      bindModal('btn-gallery', 'modal-gallery');
-      bindModal('btn-venue', 'modal-venue');
+      setupModal('btn-rsvp', 'modal-rsvp');
+      setupModal('btn-gallery', 'modal-gallery');
+      setupModal('btn-venue', 'modal-venue');
 
-      // RSVP FORM SUBMIT (LOCALSTORAGE)
-      const formRsvp = document.getElementById('form-rsvp');
-      const rsvpConfirmed = document.getElementById('rsvp-confirmed');
-      const editRsvpBtn = document.getElementById('edit-rsvp-btn');
-
-      if (localStorage.getItem('wedding_rsvp_sarah_adam')) {
-        formRsvp.style.display = 'none';
-        rsvpConfirmed.style.display = 'block';
-      }
-
-      formRsvp.addEventListener('submit', (e) => {
-        e.preventDefault();
-        const payload = {
-          name: document.getElementById('input-name').value,
-          status: document.getElementById('input-status').value,
-          guests: document.getElementById('input-guests').value,
-          notes: document.getElementById('input-notes').value,
-          date: new Date().toISOString()
-        };
-        localStorage.setItem('wedding_rsvp_sarah_adam', JSON.stringify(payload));
-        formRsvp.style.display = 'none';
-        rsvpConfirmed.style.display = 'block';
-      });
-
-      editRsvpBtn.addEventListener('click', () => {
-        formRsvp.style.display = 'block';
-        rsvpConfirmed.style.display = 'none';
-      });
-
-      // ADD TO CALENDAR ICS FILE GENERATION
+      // CALENDAR BUTTON
       document.getElementById('btn-calendar').addEventListener('click', () => {
-        const icsContent = 
-`BEGIN:VCALENDAR
-VERSION:2.0
-PRODID:-//Sarah and Adam//Wedding Save the Date//EN
-BEGIN:VEVENT
-UID:sarah-adam-wedding-2027
-DTSTAMP:20260731T000000Z
-DTSTART:20270815T153000Z
-DTEND:20270815T235900Z
-SUMMARY:Save the Date: Sarah & Adam's Wedding
-DESCRIPTION:Save the date for Sarah & Adam's wedding at Villa del Balbianello, Lake Como, Italy.
-LOCATION:Villa del Balbianello, Lenno, Lake Como, Italy
-END:VEVENT
-END:VCALENDAR`;
-
-        const blob = new Blob([icsContent], { type: 'text/calendar;charset=utf-8' });
-        const link = document.createElement('a');
-        link.href = window.URL.createObjectURL(blob);
-        link.setAttribute('download', 'Save-the-Date-Sarah-and-Adam.ics');
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
+        const title = encodeURIComponent('Sarah & Adam Wedding Celebration');
+        const details = encodeURIComponent('Join us for our wedding celebration at Villa del Balbianello, Lake Como, Italy.');
+        const location = encodeURIComponent('Villa del Balbianello, Lake Como, Italy');
+        const dates = '20270815T153000Z/20270815T230000Z';
+        const gcalUrl = `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${title}&dates=${dates}&details=${details}&location=${location}`;
+        window.open(gcalUrl, '_blank');
       });
 
-      // INIT CANVASES ON DOM LOAD & RESIZE
-      window.addEventListener('load', initCanvases);
-      window.addEventListener('resize', initCanvases);
+      // RESET BUTTON / SCRATCH AGAIN
+      document.getElementById('btn-reset').addEventListener('click', () => {
+        isRevealed = false;
+        scratchCanvas.classList.remove('canvas-hidden');
+        statusText.textContent = 'Scratch to Reveal';
+        document.getElementById('status-badge').style.borderColor = 'var(--border-delicate)';
+        invitationPage.classList.remove('revealed');
+        initCanvases();
+      });
+
+      // RSVP FORM SUBMISSION
+      const rsvpForm = document.getElementById('form-rsvp');
+      const rsvpConfirmed = document.getElementById('rsvp-confirmed');
+      rsvpForm.addEventListener('submit', (e) => {
+        e.preventDefault();
+        rsvpForm.style.display = 'none';
+        rsvpConfirmed.style.display = 'block';
+      });
+
+      document.getElementById('edit-rsvp-btn').addEventListener('click', () => {
+        rsvpConfirmed.style.display = 'none';
+        rsvpForm.style.display = 'block';
+      });
+
+      // INITIALIZE ON LOAD
+      window.addEventListener('load', () => {
+        setTimeout(initCanvases, 50);
+      });
+      window.addEventListener('resize', () => {
+        if (!isRevealed) {
+          initCanvases();
+        }
+      });
+
     })();
   </script>
 </body>
